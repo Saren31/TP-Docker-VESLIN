@@ -88,3 +88,53 @@ On utilise maintenant le multistage pour séparer la partie compilation de la pa
 En faisant cela, on réduit grandement la taille de l'image finale sans rien perdre. On choisit une image alpine pour qu'elle soit plus légère.
 
 De plus, on choisit une version d'image fixe pour node pour avoir plus de stabilité.
+
+### Etape 2 : Fusion des lignes RUN
+
+- Temps de build : **9.7s**
+- Taille de l'image : **210MB**
+
+```bash
+docker build --no-cache -t tp-optimisation:test2 .
+```
+
+Résultat du temps de build :
+```bash
+Building 9.7s (16/16) FINISHED
+```
+
+Résultat de la taille de l'image :
+```bash
+IMAGE                   ID             DISK USAGE   CONTENT SIZE   EXTRA
+tp-optimisation:test0   b09119868fb8       1.72GB          433MB    U 
+tp-optimisation:test1   9148842b5140        210MB         50.4MB
+tp-optimisation:test2   b456e73e7b78        210MB         50.4MB
+
+```
+
+Dockerfile : 
+
+```dockerfile
+FROM node:20 AS builder
+WORKDIR /app
+COPY node_modules ./node_modules
+COPY . /app
+ENV NODE_ENV=development
+RUN npm install && \ 
+	apt-get update && \
+	apt-get install -y build-essential ca-certificates locales && \ 
+	echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && locale-gen && \
+	npm run build
+
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=builder /app ./app
+EXPOSE 3000 4000 5000
+ENV NODE_ENV=development
+USER root
+CMD ["node", "app/server.js"]
+```
+
+Les lignes RUN ont été fusionnées pour réduire le nombre de layers.
+
+Dans ce cas, la taille de l'image n'est pas réduite mais temps de build est légèremment plus court.
