@@ -11,7 +11,7 @@
 docker build --no-cache -t tp-optimisation:test0 .
 ```
 
-On utilise l'option no-cache pour éviter de réutiliser les layers déjà créés lors du build.
+On utilise l'option no-cache pour éviter de réutiliser les layers déjà existants et obtenir un temps de build plus pertinent.
 
 Résultat du temps de build :
 ```bash
@@ -83,9 +83,9 @@ USER root
 CMD ["node", "app/server.js"]
 ```
 
-On utilise maintenant le multistage pour séparer la partie compilation de la partie exécution. Le premier stage contient l'ensemble des dépendances et des outils nécessaire pour faire le build alors que le deuxième stage contient seulement ce qui est nécessaire pour l'exécution.
+On utilise maintenant le multistage pour séparer la partie build de la partie exécution. Le premier stage contient l'ensemble des dépendances et des outils nécessaire à la compilation alors que le deuxième stage contient seulement ce qui est nécessaire pour exécuter l'application.
 
-En faisant cela, on réduit grandement la taille de l'image finale sans rien perdre. On choisit une image alpine pour qu'elle soit plus légère.
+En faisant cela, on réduit grandement la taille de l'image finale. On utilise aussi une image alpine afin d'alléger davantage l'image.
 
 De plus, on choisit une version d'image fixe pour node pour avoir plus de stabilité.
 
@@ -135,7 +135,7 @@ USER root
 CMD ["node", "app/server.js"]
 ```
 
-Les lignes RUN ont été fusionnées pour réduire le nombre de layers.
+Les commandes RUN ont été fusionnées pour réduire le nombre de layers.
 
 Dans ce cas, la taille de l'image n'est pas réduite mais temps de build est légèremment plus court.
 
@@ -189,9 +189,9 @@ USER root
 CMD ["node", "app/server.js"]
 ```
 
-On arrête de copier node_modules qui ne sert à rien. On copie les 2 fichiers package pour expliquer quelles dépendances doivent être installées lors du npm install. On copie le reste plus tard car ça n'est pas utile dans le RUN.
-
-On utilise le répertoire courant plutôt que app pour laisser plus de contrôle à l'utilisateur si le workdir venait à changer. 
+On arrête de copier le dossier node_modules depuis notre machine car il est recréé dans l'image avec la commande npm install. 
+On copie les 2 fichiers package en premier afin d'optimiser. 
+Le reste des fichiers est copié après le build.
 
 ### Etape 4 : Utilisation du .dockerignore
 
@@ -214,6 +214,7 @@ tp-optimisation:test0   b09119868fb8       1.72GB          433MB    U
 tp-optimisation:test1   9148842b5140        210MB         50.4MB
 tp-optimisation:test2   b456e73e7b78        210MB         50.4MB
 tp-optimisation:test3   6411b0a6e016        210MB         50.5MB
+tp-optimisation:test4   d984f3c61a0c        210MB         50.4MB
 ```
 
 .dockerignore : 
@@ -222,4 +223,36 @@ tp-optimisation:test3   6411b0a6e016        210MB         50.5MB
 node_modules
 ```
 
-On utilise le fichier .dockerignore pour être certain de ne pas copier les dossiers ou fichiers qu'on ne veut pas dans l'image
+On utilise le fichier .dockerignore pour exclure les fichiers inutiles lors du build. Cela n'impacte pas les performances, ni la taille de l'image dans ce cas, mais c'est plus propre.
+
+### Conclusion
+
+Les principales optimisations ont été appliquées : multistage, image alpine, moins de layers et meilleure gestion des fichiers copiés.
+
+Il me semble difficile d'améliorer vraiment les performances ou la taille maintenant avec mes connaissances.
+
+Dockerfile final :
+```dockerfile
+FROM node:20 AS builder
+WORKDIR /app
+ENV NODE_ENV=development
+
+COPY package*.json .
+
+RUN npm install && \ 
+	apt-get update && \
+	apt-get install -y build-essential ca-certificates locales && \ 
+	echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && locale-gen && \
+	npm run build
+	
+COPY . .
+
+
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=builder /app ./app
+EXPOSE 3000 4000 5000
+ENV NODE_ENV=development
+USER root
+CMD ["node", "app/server.js"]
+```
