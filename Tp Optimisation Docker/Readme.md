@@ -138,3 +138,88 @@ CMD ["node", "app/server.js"]
 Les lignes RUN ont été fusionnées pour réduire le nombre de layers.
 
 Dans ce cas, la taille de l'image n'est pas réduite mais temps de build est légèremment plus court.
+
+### Etape 3 : Copie intelligente des fichiers
+
+- Temps de build : **9.7s**
+- Taille de l'image : **210MB**
+
+```bash
+docker build --no-cache -t tp-optimisation:test3 .
+```
+
+Résultat du temps de build :
+```bash
+Building 9.7s (14/14 ) FINISHED
+```
+
+Résultat de la taille de l'image :
+```bash
+IMAGE                   ID             DISK USAGE   CONTENT SIZE   EXTRA
+tp-optimisation:test0   b09119868fb8       1.72GB          433MB    U 
+tp-optimisation:test1   9148842b5140        210MB         50.4MB
+tp-optimisation:test2   b456e73e7b78        210MB         50.4MB
+tp-optimisation:test3   6411b0a6e016        210MB         50.5MB
+```
+
+Dockerfile : 
+
+```dockerfile
+FROM node:20 AS builder
+WORKDIR /app
+ENV NODE_ENV=development
+
+COPY package*.json .
+
+RUN npm install && \ 
+	apt-get update && \
+	apt-get install -y build-essential ca-certificates locales && \ 
+	echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && locale-gen && \
+	npm run build
+	
+COPY . .
+
+
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=builder /app ./app
+EXPOSE 3000 4000 5000
+ENV NODE_ENV=development
+USER root
+CMD ["node", "app/server.js"]
+```
+
+On arrête de copier node_modules qui ne sert à rien. On copie les 2 fichiers package pour expliquer quelles dépendances doivent être installées lors du npm install. On copie le reste plus tard car ça n'est pas utile dans le RUN.
+
+On utilise le répertoire courant plutôt que app pour laisser plus de contrôle à l'utilisateur si le workdir venait à changer. 
+
+### Etape 4 : Utilisation du .dockerignore
+
+- Temps de build : **9.7s**
+- Taille de l'image : **210MB**
+
+```bash
+docker build --no-cache -t tp-optimisation:test3 .
+```
+
+Résultat du temps de build :
+```bash
+Building 9.7s (14/14 ) FINISHED
+```
+
+Résultat de la taille de l'image :
+```bash
+IMAGE                   ID             DISK USAGE   CONTENT SIZE   EXTRA
+tp-optimisation:test0   b09119868fb8       1.72GB          433MB    U 
+tp-optimisation:test1   9148842b5140        210MB         50.4MB
+tp-optimisation:test2   b456e73e7b78        210MB         50.4MB
+tp-optimisation:test3   6411b0a6e016        210MB         50.5MB
+```
+
+.dockerignore : 
+
+```dockerfile
+node_modules
+```
+
+On utilise le fichier .dockerignore pour être certain de ne pas copier les dossiers ou fichiers qu'on ne veut pas dans l'image
